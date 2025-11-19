@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <iostream>
 #include <limits>
 #include <algorithm>
 #include <cctype>
@@ -19,6 +20,56 @@ class ZipCodeRecordBuffer {
 public:
     ZipCodeRecordBuffer() {
         for (int i = 0; i < 6; ++i) m_fields[i] = "";
+    }
+
+    std::string pack() const {
+    std::ostringstream ss;
+    ss << m_fields[0] << ','    // Zip
+       << m_fields[1] << ','    // Place name
+       << m_fields[2] << ','    // State
+       << m_fields[3] << ','    // County
+       << latitude << ','       // Latitude
+       << longitude;            // Longitude
+    return ss.str();
+}
+
+    bool unpack(const std::string& recordString) {
+        std::istringstream ss(recordString);
+        std::vector<std::string> fields;
+        std::string token;
+        
+        try {
+            // Parse CSV with proper quote handling
+            while (std::getline(ss, token, ',')) {
+                trim(token);
+                // Remove surrounding quotes if present
+                if (token.size() >= 2 && token.front() == '"' && token.back() == '"') {
+                    token = token.substr(1, token.size() - 2);
+                    trim(token);
+                }
+                fields.push_back(token);
+            }
+            
+            // Need at least 6 fields
+            if (fields.size() < 6) {
+                return false;
+            }
+            
+            // Assign fields
+            m_fields[0] = truncateTo(fields[0], ZIP_CODE_LENGTH);      // Zip
+            m_fields[1] = truncateTo(fields[1], PLACE_NAME_LENGTH);    // Place
+            m_fields[2] = truncateTo(fields[2], STATE_LENGTH);         // State
+            m_fields[3] = truncateTo(fields[3], COUNTY_LENGTH);        // County
+            
+            // Parse numeric fields
+            latitude = std::stod(fields[4]);   // Lat
+            longitude = std::stod(fields[5]);  // Lon
+            
+            return true;
+        } catch (const std::exception& e) {
+            // Handle error (e.g., bad stod conversion)
+            return false;
+        }
     }
 
     // Reads until a valid data record is found or EOF; returns true when a valid record is parsed
@@ -104,7 +155,7 @@ public:
         // EOF reached without a valid data record
         return false;
     }
-    
+
     std::string getZipCode() const { return m_fields[0]; }
     std::string getPlaceName() const { return m_fields[1]; }
     std::string getState() const { return m_fields[2]; }
@@ -112,23 +163,15 @@ public:
     double getLatitude() const { return latitude; }
     double getLongitude() const { return longitude; }
 
-    // Serialize this record to a single comma-separated line (for BlockBuffer)
-    void WriteRecord(std::ostream &out) const {
-        out << m_fields[0] << ','    // Zip
-            << m_fields[1] << ','    // Place name
-            << m_fields[2] << ','    // State
-            << m_fields[3] << ','    // County
-            << latitude << ','       // Latitude
-            << longitude;            // Longitude
+    // Print method for displaying record information
+    void print() const {
+        std::cout << "ZIP: " << m_fields[0]
+                  << " | Place: " << m_fields[1]
+                  << " | State: " << m_fields[2]
+                  << " | County: " << m_fields[3]
+                  << " | Lat: " << latitude
+                  << " | Lon: " << longitude << std::endl;
     }
-
-    // Approximate size in bytes (for BlockBuffer space checking)
-    size_t getRecordSize() const {
-        std::ostringstream oss;
-        WriteRecord(oss);
-        return oss.str().size();
-    }
-
 
 private:
     std::string m_fields[6];
